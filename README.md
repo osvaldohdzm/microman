@@ -1,24 +1,55 @@
-# Micromanager — README (en español)
+# Micromanager
 
 [![Ver video](https://img.youtube.com/vi/1gIrfPWoSKG4dh5U4vHIv31r7RQjWWJpd/0.jpg)](https://drive.google.com/file/d/1gIrfPWoSKG4dh5U4vHIv31r7RQjWWJpd/view)
 
-Quick Install 
+---
+
+## 📌 Resumen
+
+**Micromanager** es una aplicación .NET que:
+
+- Guarda capturas de pantalla periódicas.
+- Registra cambios de ventana y eventos en logs.
+- Recibe tres argumentos:
+
+```text
+<outputDir> <cleanupDays> <screenshotSeconds>
+````
+
+**Ejemplo:**
+
+```text
+F:\Micromanager 30 5
+```
+
+Esto configura la salida en `F:\Micromanager`, limpieza cada 30 días y captura cada 5 segundos.
+
+---
+
+## ⚡ Quick Install
 
 ```powershell
-mkdir "C:\Micromanager" 
+mkdir "C:\Micromanager"
 
+# Crear tarea programada
 schtasks /create /tn "Micromanager" /tr '"C:\Users\Administrator\Desktop\micromanager\Micromanager.exe" "C:\Micromanager" 30 5 --stealth' /sc onlogon /rl highest /ru $env:USERNAME /it /f
 
+# Ejecutar tarea ahora
 schtasks /Run /TN "Micromanager"
 
+# Consultar tarea
 schtasks /Query /TN "Micromanager" /V /FO LIST
 
+# Detener tarea
 schtasks /End /TN "Micromanager"
 
+# Eliminar tarea
 schtasks /Delete /TN "Micromanager"
 ```
 
-Quick Build
+---
+
+## 🛠 Quick Build
 
 ```powershell
 dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -p:IncludeAllContentForSelfExtract=true
@@ -26,116 +57,65 @@ dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true --self-contained 
 copy ".\bin\Release\net8.0-windows\win-x64\publish\Micromanager.exe" "Micromanager.exe"
 ```
 
-
-
-
-
-```powershell
-
-
-
-```
-
-## 1. Resumen
-
-Micromanager es una aplicación .NET que:
-
-* Guarda capturas de pantalla periódicas.
-* Registra cambios de ventana y eventos en logs.
-* Recibe 3 argumentos:
-
-  ```text
-  <outputDir> <cleanupDays> <screenshotSeconds>
-  ```
-
-  Ejemplo para salida `F:\Micromanager`, limpieza cada 30 días y captura cada 5s:
-
-  ```text
-  F:\Micromanager 30 5
-  ```
-
----
-
-## 2. Compilar y publicar (release, single file, self-contained)
-
-Ejecuta desde el directorio del proyecto:
-
-```powershell
-dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -p:IncludeAllContentForSelfExtract=true
-```
-
-Ruta de salida típica (net8.0-windows / win-x64):
+Ruta típica de salida:
 
 ```
 bin\Release\net8.0-windows\win-x64\publish\
 ```
 
-Copiar el exe a la ubicación final (ejemplo):
-
-```powershell
-copy "C:\Users\Administrator\Desktop\micromanager\bin\Release\net8.0-windows\win-x64\publish\Micromanager.exe" "C:\Users\Administrator\Desktop\micromanager\Micromanager.exe"
-```
-
 ---
 
-## 3. Ejecutar manualmente (para probar)
+## ▶️ Ejecutar manualmente (para pruebas)
 
-Probar en primer plano (mismo usuario, interactivo) antes de programar:
+Desde PowerShell:
 
 ```powershell
-# Desde PowerShell (no elevar si quieres probar como el usuario actual)
 Start-Process -FilePath "C:\Users\Administrator\Desktop\micromanager\Micromanager.exe" -ArgumentList "F:\Micromanager 30 5 --stealth" -Wait
 ```
 
-O en CMD / Run:
+Desde CMD:
 
 ```text
 C:\Users\Administrator\Desktop\micromanager\Micromanager.exe F:\Micromanager 30 5 --stealth
 ```
 
-**Verifica** que se generen archivos en `F:\Micromanager` (ej.: `info.log`, `debug.log`, `capture_*.png`, `activity_log.json`).
+**Verifica** que se generen archivos en `F:\Micromanager`:
+
+* `info.log`
+* `debug.log`
+* `capture_*.png`
+* `activity_log.json`
 
 ---
 
-## 4. Crear la tarea programada (PowerShell — usando el usuario actual)
+## 📅 Crear tarea programada (PowerShell — usuario actual)
 
-> **IMPORTANTE:** abre PowerShell *como Administrador* para crear la tarea. La tarea debe ejecutarse en la sesión interactiva para que los hooks y las capturas funcionen (`/IT` y usando el usuario que inicia sesión).
-> El ejemplo usa variables de entorno para el usuario actual.
+> ⚠️ Abre PowerShell **como Administrador**.
+> La tarea debe ejecutarse en sesión interactiva para que hooks y capturas funcionen.
 
 ```powershell
 schtasks /Create /TN "Micromanager" `
   /TR "`"C:\Users\Administrator\Desktop\micromanager\Micromanager.exe`" F:\Micromanager 30 5 --stealth" `
   /SC ONLOGON /RL HIGHEST /RU "$env:COMPUTERNAME\$env:USERNAME" /IT /F
-
-
-
-  $UserDir = "$env:USERPROFILE\Micromanager"
-schtasks /create /tn "Micromanager" /tr "`"C:\Users\Administrator\Desktop\micromanager\Micromanager.exe`" $UserDir 30 5 --stealth" /sc onlogon /rl highest /ru "$env:USERNAME" /it /f
 ```
 
-Qué significa:
+### Explicación de flags:
 
 * `/SC ONLOGON` — ejecuta al inicio de sesión.
-* `/RL HIGHEST` — runlevel más alto (ejecuta con privilegios elevados si el usuario los tiene).
-* `/RU "$env:COMPUTERNAME\$env:USERNAME"` — usa el usuario local actual.
-* `/IT` — fuerza ejecución en sesión interactiva (necesario para hooks y captura de pantalla).
-* `/F` — sobreescribe si ya existe la tarea.
-
-**Alternativa** si prefieres especificar sólo nombre de usuario (sin dominio/PC):
-
-```powershell
-/RU "$env:USERNAME"
-```
+* `/RL HIGHEST` — privilegios elevados.
+* `/RU "$env:COMPUTERNAME\$env:USERNAME"` — usuario local actual.
+* `/IT` — sesión interactiva (necesario para hooks y captura de pantalla).
+* `/F` — sobrescribir si ya existe la tarea.
 
 ---
 
-## 5. Ejecutar la tarea ahora (probar)
+## ▶️ Ejecutar tarea ahora
 
 ```powershell
 schtasks /Run /TN "Micromanager"
 ```
 
-Comprobar si realmente inició y en qué sesión:
+Verificar ejecución:
 
 ```powershell
 schtasks /Query /TN "Micromanager" /V /FO LIST
@@ -143,7 +123,7 @@ schtasks /Query /TN "Micromanager" /V /FO LIST
 
 ---
 
-## 6. Eliminar la tarea
+## ❌ Eliminar tarea
 
 ```powershell
 schtasks /Delete /TN "Micromanager" /F
@@ -151,73 +131,72 @@ schtasks /Delete /TN "Micromanager" /F
 
 ---
 
-## 7. Configuración para tu requerimiento (captura cada 5s, limpieza cada 30 días)
-
-Al crear/ejecutar el exe debes pasar estos argumentos en ese orden:
+## ⚙️ Configuración de parámetros
 
 ```text
 Micromanager.exe <outputDir> <cleanupDays> <screenshotSeconds>
 ```
 
-Ejemplo concreto:
+**Ejemplo:**
 
 ```text
 Micromanager.exe F:\Micromanager 30 5 --stealth
 ```
 
-(En los ejemplos del `schtasks` ya usamos `F:\Micromanager 30 5`.)
+---
+
+## 🐞 Debug y comprobaciones rápidas
+
+* Añade un `startup.log` al inicio:
+
+```csharp
+File.AppendAllText(@"C:\Temp\micromanager_startup.log",
+    $"{DateTime.Now} - Started - User:{Environment.UserName} - Interactive:{Environment.UserInteractive}{Environment.NewLine}");
+```
+
+* Si `startup.log` **NO aparece**: la tarea no se inicia o no es interactiva.
+* Si aparece pero no hay capturas: la sesión no tiene acceso al escritorio.
+* Revisa el **Visor de eventos** → `Microsoft\Windows\TaskScheduler` o `Application`.
 
 ---
 
-## 8. Debug y comprobaciones rápidas
+## 🔐 Permisos / UAC / Antivirus
 
-* Añade un `startup.log` al inicio del `Main` o `StartAsync` para confirmar inicio y usuario:
-
-  ```csharp
-  File.AppendAllText(@"C:\Temp\micromanager_startup.log", $"{DateTime.Now} - Started - User:{Environment.UserName} - Interactive:{Environment.UserInteractive}{Environment.NewLine}");
-  ```
-* Si `startup.log` NO aparece al ejecutar la tarea: la tarea **no se está iniciando** o se inicia en una sesión no interactiva.
-* Si `startup.log` aparece pero NO hay capturas ni hooks: probablemente se está ejecutando en una sesión sin acceso al escritorio (los hooks no reciben eventos).
-* Revisa el **Visor de eventos** → `Microsoft\Windows\TaskScheduler` o los eventos de `Application` para ver errores al iniciar la tarea.
+* Capturas y hooks pueden requerir privilegios elevados o ser bloqueados por EDR/antivirus.
+* Ejecutar como usuario interactivo y con `/RL HIGHEST` ayuda.
+* Asegúrate que el exe esté permitido en entornos restringidos.
 
 ---
 
-## 9. Permisos / UAC / Antivirus
+## ⚖️ Seguridad y ética
 
-* Capturar pantalla y hooks pueden requerir permisos elevados o ser bloqueados por soluciones EDR/antivirus.
-* Asegúrate que el ejecutable esté permitido o firmado si es necesario en entornos restringidos.
-* Ejecutar con `/RL HIGHEST` y como el mismo usuario que inicia sesión ayuda a evitar problemas de contexto.
-
----
-
-## 10. Seguridad y ética
-
-* Este programa registra actividad y tecleos; asegúrate de tener **autorización explícita** para usarlo en cualquier equipo que no sea de tu propiedad.
-* Respeta leyes y políticas de privacidad.
+* Micromanager registra actividad y teclas.
+* **Solo usar con autorización explícita**.
+* Respetar leyes y políticas de privacidad.
 
 ---
 
-## 11. Ejemplo final completo (paso a paso)
+## 📝 Ejemplo completo (paso a paso)
 
-1. Publicar:
+1. **Publicar:**
 
 ```powershell
 dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -p:IncludeAllContentForSelfExtract=true
 ```
 
-2. Copiar exe al folder objetivo:
+2. **Copiar exe a carpeta final:**
 
 ```powershell
 copy "C:\Users\Administrator\Desktop\micromanager\bin\Release\net8.0-windows\win-x64\publish\Micromanager.exe" "C:\Users\Administrator\Desktop\micromanager\Micromanager.exe"
 ```
 
-3. Probar manualmente:
+3. **Probar manualmente:**
 
 ```powershell
 C:\Users\Administrator\Desktop\micromanager\Micromanager.exe F:\Micromanager 30 5 --stealth
 ```
 
-4. Crear tarea (PowerShell como Admin):
+4. **Crear tarea programada:**
 
 ```powershell
 schtasks /Create /TN "Micromanager" `
@@ -225,25 +204,20 @@ schtasks /Create /TN "Micromanager" `
   /SC ONLOGON /RL HIGHEST /RU "$env:COMPUTERNAME\$env:USERNAME" /IT /F
 ```
 
-5. Ejecutar ahora:
+5. **Ejecutar ahora:**
 
 ```powershell
 schtasks /Run /TN "Micromanager"
 ```
 
-6. Verificar:
+6. **Verificar:**
 
 ```powershell
 schtasks /Query /TN "Micromanager" /V /FO LIST
-# revisar F:\Micromanager para logs y captures
+# Revisar F:\Micromanager para logs y capturas
 ```
 
-7. Eliminar si ya no lo quieres:
 
 ```powershell
 schtasks /Delete /TN "Micromanager" /F
 ```
-
----
-
-Si quieres, te genero ahora un archivo `README.md` completo listo para copiar/pegar con este contenido. ¿Lo quieres en formato listo para guardar?

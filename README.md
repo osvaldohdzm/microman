@@ -1,7 +1,6 @@
 # Micromanager — README (en español)
 
-<iframe src="https://drive.google.com/file/d/1gIrfPWoSKG4dh5U4vHIv31r7RQjWWJpd/preview" width="640" height="480" allow="autoplay"></iframe>
-
+[![Ver video](https://img.youtube.com/vi/1gIrfPWoSKG4dh5U4vHIv31r7RQjWWJpd/0.jpg)](https://drive.google.com/file/d/1gIrfPWoSKG4dh5U4vHIv31r7RQjWWJpd/view)
 
 Quick Install 
 

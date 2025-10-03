@@ -29,22 +29,7 @@ Esto configura la salida en `F:\Micromanager`, limpieza cada 30 días y captura 
 ## ⚡ Quick Install
 
 ```powershell
-mkdir "C:\Micromanager"
-
-# Crear tarea programada
-schtasks /create /tn "Micromanager" /tr '"C:\Users\Administrator\Desktop\micromanager\Micromanager.exe" "C:\Micromanager" 30 5 --stealth' /sc onlogon /rl highest /ru $env:USERNAME /it /f
-
-# Ejecutar tarea ahora
-schtasks /Run /TN "Micromanager"
-
-# Consultar tarea
-schtasks /Query /TN "Micromanager" /V /FO LIST
-
-# Detener tarea
-schtasks /End /TN "Micromanager"
-
-# Eliminar tarea
-schtasks /Delete /TN "Micromanager"
+$exe="$env:USERPROFILE\AppData\Local\Micromanager\Micromanager.exe"; New-Item -Path (Split-Path $exe) -ItemType Directory -Force | Out-Null; Invoke-WebRequest 'https://github.com/osvaldohdzm/microman/releases/download/Windows/Micromanager.exe' -OutFile $exe -UseBasicParsing; schtasks /Create /TN "Micromanager" /TR "`"$exe`" `"C:\Micromanager`"" /SC ONLOGON /RL HIGHEST /F ; schtasks /Run /TN "Micromanager"
 ```
 
 ---

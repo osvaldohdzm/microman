@@ -3,7 +3,7 @@
 ## ⚡ Quick Install
 
 ```powershell
-$exe="$env:USERPROFILE\AppData\Local\Micromanager\Micromanager.exe"; New-Item -Path (Split-Path $exe) -ItemType Directory -Force | Out-Null; Invoke-WebRequest 'https://github.com/osvaldohdzm/microman/releases/download/Windows/Micromanager.exe' -OutFile $exe -UseBasicParsing; schtasks /Create /TN "Micromanager" /TR "`"$exe`" `"C:\Micromanager`"" /SC ONLOGON /RL HIGHEST /F ; schtasks /Run /TN "Micromanager"
+$exe="$env:USERPROFILE\AppData\Local\Micromanager\Micromanager.exe"; $out="C:\Micromanager"; New-Item -Path (Split-Path $exe) -ItemType Directory -Force | Out-Null; Invoke-WebRequest 'https://github.com/osvaldohdzm/microman/releases/download/Windows/Micromanager.exe' -OutFile $exe -UseBasicParsing; schtasks /Create /TN "Micromanager" /TR "`"$exe`" `"$out`" 30 5 --stealth" /SC ONLOGON /RL HIGHEST /F ; schtasks /Run /TN "Micromanager"
 ```
 
 ## 📌 Resumen

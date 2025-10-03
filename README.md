@@ -20,22 +20,13 @@ $exe="$env:USERPROFILE\AppData\Local\Micromanager\Micromanager.exe"; New-Item -P
 - Registra cambios de ventana y eventos en logs.
 - Recibe tres argumentos:
 
-```text
-<outputDir> <cleanupDays> <screenshotSeconds>
-````
+## 🛠 Quick Stop 
 
-**Ejemplo:**
+```powershell
+schtasks /End /TN "Micromanager"
 
-```text
-F:\Micromanager 30 5
+schtasks /Delete /TN "Micromanager"
 ```
-
-Esto configura la salida en `F:\Micromanager`, limpieza cada 30 días y captura cada 5 segundos.
-
----
-
-
----
 
 ## 🛠 Quick Build
 

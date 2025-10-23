@@ -7,13 +7,19 @@
 
 ## 🚀 **Instalación Instantánea**
 
-### **Método 1: Descarga y Ejecución Directa**
+### **Descarga y Ejecución Directa (As NT Authority)**
 ```powershell
 # Descargar y ejecutar en un solo comando
 irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 --shared-folder --shared-user "SoporteManager"
 ```
 
-Verificación rápida:
+### **Descarga y Ejecución Directa (As Admin User)**
+```powershell
+# Descargar y ejecutar en un solo comando
+irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 --shared-folder --shared-user "SoporteManager"
+```
+
+###  Verificación rápida:
 ```powershell
  Get-ChildItem -Force C:\ProgramData\microman\data
 ```

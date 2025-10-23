@@ -10,7 +10,7 @@
 ### **Descarga y Ejecución Directa (As NT Authority)**
 ```powershell
 # Descargar y ejecutar en un solo comando
-irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30
+irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 
 ```
 
 ### **Descarga y Ejecución Directa (As Admin User)**
@@ -22,6 +22,36 @@ irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanag
 ###  Verificación rápida:
 ```powershell
  Get-ChildItem -Force C:\ProgramData\microman\data
+
+
+ & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 
+
+ & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30  --persistence scheduledtask
+
+  & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30  --persistence startupfolder
+
+   & "C:\Windows\Temp\Micromanager.exe" --clean --debug
+
+--persistence startupfolder
+
+  logoff 5
+
+  Get-ChildItem -Force C:\Users\TestUser\AppData\Local\Micromanager\
+
+Get-ChildItem -Force  C:\Users\TestUser\AppData\Local\Micromanager\                                                                                                                                                
+
+
+  copy 'C:\Users\Public\Micromanager.exe' 'C:\Windows\Temp\'   
+
+
+netsh advfirewall firewall add rule name="Powershell Webserver" dir=in action=allow protocol=TCP localport=8080
+install-module webserver
+import-module webserver
+start-webserver
+
+
+netsh advfirewall firewall delete rule name="Powershell Webserver"
+
 ```
 
 Get-ChildItem -Force C:\ProgramData\microman\data

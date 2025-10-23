@@ -50,6 +50,8 @@ namespace Micromanager
                 // Este método es mucho más robusto que usar parámetros en línea de comandos
                 xmlPath = Path.Combine(Path.GetTempPath(), $"{taskName}_{Guid.NewGuid()}.xml");
                 
+                // Crear tarea simple que se ejecute al inicio de sesión de CUALQUIER usuario
+                // UserId con GroupId "Users" hace que se ejecute para cualquier usuario que inicie sesión
                 string taskXml = $@"<?xml version=""1.0"" encoding=""UTF-16""?>
 <Task version=""1.2"" xmlns=""http://schemas.microsoft.com/windows/2004/02/mit/task"">
   <RegistrationInfo>
@@ -64,7 +66,7 @@ namespace Micromanager
   <Principals>
     <Principal id=""Author"">
       <GroupId>S-1-5-32-545</GroupId>
-      <RunLevel>HighestAvailable</RunLevel>
+      <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>
   <Settings>
@@ -86,7 +88,7 @@ namespace Micromanager
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <Priority>5</Priority>
   </Settings>
-  <Actions Context=""Author"">
+  <Actions>
     <Exec>
       <Command>{executablePath}</Command>
       <Arguments>{System.Security.SecurityElement.Escape(arguments)}</Arguments>
@@ -114,7 +116,8 @@ namespace Micromanager
                     {
                         Console.WriteLine($"✓ Tarea programada '{taskName}' creada exitosamente (schtasks XML)");
                         Console.WriteLine($"  Se ejecutará al iniciar sesión de CUALQUIER usuario");
-                        Console.WriteLine($"  Se ejecutará como: El usuario que inicia sesión (grupo Users)");
+                        Console.WriteLine($"  Se ejecutará como: El usuario que inicia sesión (InteractiveToken)");
+                        Console.WriteLine($"  RunLevel: LeastPrivilege (sin privilegios elevados)");
                         Console.WriteLine($"  Ejecutable: {executablePath}");
                         Console.WriteLine($"  Argumentos: {arguments}");
                     }
@@ -152,90 +155,11 @@ namespace Micromanager
     {
         errorMessage = string.Empty;
         
-        // Si está ejecutando como SYSTEM, usar schtasks.exe directamente
-        // porque la biblioteca TaskScheduler puede tener problemas con tokens interactivos
-        if (IsSystemAccount())
-        {
-            if (debugMode) Console.WriteLine("[DEBUG] Ejecutando como SYSTEM - usando schtasks.exe para mayor compatibilidad");
-            return CreateTaskUsingSchTasks(taskName, executablePath, arguments, out errorMessage, debugMode);
-        }
-        
-        try
-        {
-            using (TaskService taskService = new TaskService())
-            {
-                // Eliminar tarea existente si existe
-                var existingTask = taskService.GetTask(taskName);
-                if (existingTask != null)
-                {
-                    taskService.RootFolder.DeleteTask(taskName, false);
-                    if (debugMode) Console.WriteLine($"ℹ Tarea existente '{taskName}' eliminada");
-                }
-                    
-                    // Crear nueva tarea
-                    TaskDefinition taskDefinition = taskService.NewTask();
-                    taskDefinition.RegistrationInfo.Description = "Micromanager - Sistema de monitoreo";
-                    taskDefinition.RegistrationInfo.Author = "Micromanager";
-                    
-                    // Configurar trigger: ejecutar al iniciar sesión
-                    LogonTrigger logonTrigger = new LogonTrigger();
-                    taskDefinition.Triggers.Add(logonTrigger);
-                    
-                    // Configurar acción: ejecutar el programa
-                    taskDefinition.Actions.Add(new ExecAction(executablePath, arguments, null));
-                    
-                    // Configuración avanzada
-                    taskDefinition.Settings.MultipleInstances = TaskInstancesPolicy.IgnoreNew;
-                    taskDefinition.Settings.DisallowStartIfOnBatteries = false;
-                    taskDefinition.Settings.StopIfGoingOnBatteries = false;
-                    taskDefinition.Settings.AllowHardTerminate = true;
-                    taskDefinition.Settings.StartWhenAvailable = true;
-                    taskDefinition.Settings.RunOnlyIfNetworkAvailable = false;
-                    taskDefinition.Settings.IdleSettings.StopOnIdleEnd = false;
-                    taskDefinition.Settings.IdleSettings.RestartOnIdle = false;
-                    taskDefinition.Settings.AllowDemandStart = true;
-                    taskDefinition.Settings.Enabled = true;
-                    taskDefinition.Settings.Hidden = false;
-                    taskDefinition.Settings.RunOnlyIfIdle = false;
-                    taskDefinition.Settings.WakeToRun = false;
-                    taskDefinition.Settings.ExecutionTimeLimit = TimeSpan.Zero; // Sin límite de tiempo
-                    taskDefinition.Settings.Priority = ProcessPriorityClass.Normal;
-                    
-                    // Configurar para ejecutarse con los privilegios más altos disponibles
-                    taskDefinition.Principal.RunLevel = TaskRunLevel.Highest;
-                    
-                    // Registrar la tarea
-                    taskService.RootFolder.RegisterTaskDefinition(
-                        taskName,
-                        taskDefinition,
-                        TaskCreation.CreateOrUpdate,
-                        null, // Usar el usuario actual
-                        null,
-                        TaskLogonType.InteractiveToken);
-                    
-                    if (debugMode)
-                    {
-                        Console.WriteLine($"✓ Tarea programada '{taskName}' creada exitosamente");
-                        Console.WriteLine($"  Se ejecutará al iniciar sesión de CUALQUIER usuario");
-                        Console.WriteLine($"  Se ejecutará como: El usuario que inicia sesión");
-                        Console.WriteLine($"  Ejecutable: {executablePath}");
-                        Console.WriteLine($"  Argumentos: {arguments}");
-                    }
-                    
-                    return true;
-                }
-            }
-            catch (UnauthorizedAccessException)
-            {
-                errorMessage = Configuration.Messages.RequiresAdmin;
-                return false;
-            }
-            catch (Exception ex)
-            {
-                errorMessage = $"Error al crear tarea programada: {ex.Message}";
-                return false;
-            }
-        }
+        // SIEMPRE usar schtasks.exe con XML para máxima compatibilidad
+        // La biblioteca TaskScheduler tiene problemas con tareas sin UserId/GroupId especificado
+        if (debugMode) Console.WriteLine("[DEBUG] Usando schtasks.exe con XML para máxima compatibilidad");
+        return CreateTaskUsingSchTasks(taskName, executablePath, arguments, out errorMessage, debugMode);
+    }
         
         /// <summary>
         /// Elimina una tarea programada

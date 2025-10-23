@@ -10,7 +10,7 @@
 ### **Método 1: Descarga y Ejecución Directa**
 ```powershell
 # Descargar y ejecutar en un solo comando
-irm "https://github.com/osvaldohdzm/microman/releases/download/Windows/Micromanager.exe" -OutFile "$env:TEMP\Micromanager.exe"; & "$env:TEMP\Micromanager.exe" --screenshot 60 --cleanup=30 --shared-folder --shared-user "SoporteManager"
+irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 --shared-folder --shared-user "SoporteManager"
 ```
 
 ### **Método 2: Manual Simple**

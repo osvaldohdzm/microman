@@ -262,7 +262,7 @@ if (debugMode)
 }
 
 bool isFirstTimeInstall = !currentExePath.Equals(targetExePath, StringComparison.OrdinalIgnoreCase) && !setupMode;
-bool needsConfiguration = isFirstTimeInstall || (sharedFolderMode && !setupMode);
+bool needsConfiguration = isFirstTimeInstall || (sharedFolderMode && !setupMode) || reconfigureMode;
 
 File.AppendAllText(emergencyLogPath, $"[{DateTime.Now}] isFirstTimeInstall: {isFirstTimeInstall}\n");
 File.AppendAllText(emergencyLogPath, $"[{DateTime.Now}] needsConfiguration: {needsConfiguration}\n");
@@ -424,17 +424,35 @@ if (needsConfiguration)
                 taskArguments,
                 out string taskError,
                 debugMode);
-                
-            if (!taskCreated)
+            
+            // SIEMPRE mostrar resultado de creación de tarea (no solo en debug)
+            if (taskCreated)
             {
+                string confirmMsg = $"\n✓ TAREA PROGRAMADA INSTALADA CORRECTAMENTE\n" +
+                                   $"  Nombre: {Configuration.TaskName}\n" +
+                                   $"  Se ejecutará automáticamente cuando cualquier usuario inicie sesión\n" +
+                                   $"  Ejecutará: {taskExecutable} {taskArguments}\n";
+                Console.WriteLine(confirmMsg);
+                
+                // Log en archivo para confirmar
+                string startupLogPath = Path.Combine(Configuration.DataPath, "startup.log");
+                File.AppendAllText(startupLogPath, $"[{DateTime.Now}] {confirmMsg}{Environment.NewLine}");
+            }
+            else
+            {
+                string errorMsg = $"\n⚠ ERROR: No se pudo crear la tarea programada\n" +
+                                 $"  Razón: {taskError}\n" +
+                                 $"\n  Puedes crear la tarea manualmente con:\n" +
+                                 $"  schtasks /Create /TN \"Micromanager\" /TR \"\\\"{taskExecutable}\\\" {taskArguments}\" /SC ONLOGON /RL HIGHEST /F\n";
+                Console.WriteLine(errorMsg);
+                
+                // Log en archivo
+                string startupLogPath = Path.Combine(Configuration.DataPath, "startup.log");
+                File.AppendAllText(startupLogPath, $"[{DateTime.Now}] {errorMsg}{Environment.NewLine}");
+                
                 if (debugMode)
                 {
-                    Console.WriteLine($"\n⚠ ADVERTENCIA: No se pudo crear la tarea programada automáticamente");
-                    Console.WriteLine($"   Razón: {taskError}");
-                    Console.WriteLine($"\n   Puedes crear la tarea manualmente con este comando:");
-                    Console.WriteLine($"   schtasks /Create /TN \"Micromanager\" /TR \"\\\"{taskExecutable}\\\" {taskArguments}\" /SC ONLOGON /RL HIGHEST /F");
-                    Console.WriteLine($"   (Se ejecutará con el usuario que inicia sesión)");
-                    Console.WriteLine("");
+                    Console.WriteLine($"[DEBUG] Detalles del error: {taskError}");
                 }
             }
             

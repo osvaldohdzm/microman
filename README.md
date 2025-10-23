@@ -27,6 +27,15 @@ Get-ChildItem -Force C:\ProgramData\microman\data
 
 ---
 
+## 🛠 Quick Build
+```powershell
+dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true --self-contained true -p:IncludeAllContentForSelfExtract=true
+
+rm "Micromanager.exe"; copy ".\bin\Release\net8.0-windows\win-x64\publish\Micromanager.exe" "Micromanager.exe"
+```
+
+---
+
 ## ⚡ **Configuraciones Predefinidas**
 
 ### **🔧 Configuración Estándar** (Recomendado para la mayoría de casos)

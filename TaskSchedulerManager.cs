@@ -62,7 +62,7 @@ namespace Micromanager
     </LogonTrigger>
   </Triggers>
   <Principals>
-    <Principal>
+    <Principal id=""Author"">
       <GroupId>S-1-5-32-545</GroupId>
       <RunLevel>HighestAvailable</RunLevel>
     </Principal>

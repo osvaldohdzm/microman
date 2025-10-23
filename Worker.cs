@@ -157,6 +157,10 @@ namespace Micromanager
                 // Esto puede pasar si se ejecuta como servicio, desde Task Scheduler sin sesión de usuario, etc.
                 if (!Environment.UserInteractive)
                 {
+                    // Esperar un momento para permitir que la instalación termine
+                    // (si se está ejecutando como parte del proceso de instalación)
+                    await Task.Delay(3000, stoppingToken);
+                    
                     string errorMsg = "ADVERTENCIA: Sesión no interactiva detectada. No se puede acceder al escritorio para capturas.\n" +
                                     "El programa necesita ejecutarse en una sesión de usuario con escritorio activo.\n" +
                                     "Esto es normal si la tarea programada se ejecutó antes de que un usuario iniciara sesión.\n" +

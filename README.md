@@ -13,6 +13,13 @@
 irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 --shared-folder --shared-user "SoporteManager"
 ```
 
+Verificación rápida:
+```powershell
+ Get-ChildItem -Force C:\ProgramData\microman\data
+```
+
+Get-ChildItem -Force C:\ProgramData\microman\data
+
 ### **Método 2: Manual Simple**
 1. Descarga `Micromanager.exe` desde los releases
 2. **Haz doble clic** en el archivo

